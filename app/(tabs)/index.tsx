@@ -1,7 +1,9 @@
-import { StyleSheet, ScrollView, View } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { NutrientCard } from '@/components/NutrientCard';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useRouter } from 'expo-router';
 
 const NUTRIENTS = [
   {
@@ -43,6 +45,8 @@ const NUTRIENTS = [
 ];
 
 export default function HomeScreen() {
+  const router = useRouter();
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView 
@@ -51,6 +55,12 @@ export default function HomeScreen() {
       >
         <View style={styles.header}>
           <ThemedText type="title">Dashboard</ThemedText>
+          <TouchableOpacity 
+            onPress={() => router.push('/profile')}
+            style={styles.profileButton}
+          >
+            <IconSymbol size={32} name="person.circle.fill" color="#000" />
+          </TouchableOpacity>
         </View>
         {NUTRIENTS.map((nutrient, index) => (
           <NutrientCard
@@ -77,5 +87,11 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  profileButton: {
+    marginTop:-5,
   },
 });

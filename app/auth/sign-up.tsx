@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
-import { Link } from 'expo-router';
+import { View, StyleSheet, TextInput, TouchableOpacity, Alert, Pressable, KeyboardAvoidingView, Platform, ScrollView, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { Link, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,20 +8,23 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
   const { signUp } = useAuth();
 
   const handleSignUp = async () => {
     if (loading) return;
     
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+    
     try {
       setLoading(true);
       await signUp(email, password);
-      Alert.alert(
-        'Success',
-        'Please check your email for verification instructions.',
-        [{ text: 'OK', onPress: () => {} }]
-      );
+      router.replace('/(tabs)');
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'An error occurred');
     } finally {
@@ -31,43 +34,61 @@ export default function SignUpScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.content}>
-        <ThemedText type="title" style={styles.title}>Create Account</ThemedText>
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        
-        <TouchableOpacity 
-          style={styles.button} 
-          onPress={handleSignUp}
-          disabled={loading}
-        >
-          <ThemedText style={styles.buttonText}>
-            {loading ? 'Creating account...' : 'Sign Up'}
-          </ThemedText>
-        </TouchableOpacity>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+          >
+            <ThemedText type="title" style={styles.title}>Create Account</ThemedText>
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
 
-        <View style={styles.footer}>
-          <ThemedText>Already have an account? </ThemedText>
-          <Link href="/auth/sign-in">
-            <ThemedText style={styles.link}>Sign In</ThemedText>
-          </Link>
-        </View>
-      </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+            />
+            
+            <TouchableOpacity 
+              style={styles.button} 
+              onPress={handleSignUp}
+              disabled={loading}
+            >
+              <ThemedText style={styles.buttonText}>
+                {loading ? 'Creating account...' : 'Sign Up'}
+              </ThemedText>
+            </TouchableOpacity>
+
+            <View style={styles.footer}>
+              <ThemedText>Already have an account? </ThemedText>
+              <Pressable onPress={() => router.replace('/auth/sign-in')}>
+                <ThemedText style={styles.link}>Sign In</ThemedText>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
@@ -77,7 +98,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     padding: 20,
     justifyContent: 'center',
   },

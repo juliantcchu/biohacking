@@ -5,7 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
-
+import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
@@ -14,19 +14,28 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { session, loading } = useAuth();
+  const router = useRouter();
   const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    if (!session && !loading) {
+      router.replace('/auth/sign-up');
+    }
+  }, [session, loading]);
+
 
   if (loading) {
     return null;
   }
+
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         {!session ? (
           <>
-            <Stack.Screen name="auth/sign-in" options={{ title: 'Sign In' }} />
             <Stack.Screen name="auth/sign-up" options={{ title: 'Sign Up' }} />
+            <Stack.Screen name="auth/sign-in" options={{ title: 'Sign In' }} />
           </>
         ) : (
           <>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
-import { Link } from 'expo-router';
+import { View, StyleSheet, TextInput, TouchableOpacity, Alert, Pressable, KeyboardAvoidingView, Platform, ScrollView, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { Link, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,13 +10,14 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
-
+  const router = useRouter();
   const handleSignIn = async () => {
     if (loading) return;
     
     try {
       setLoading(true);
       await signIn(email, password);
+      router.replace('/(tabs)');
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'An error occurred');
     } finally {
@@ -26,43 +27,53 @@ export default function SignInScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.content}>
-        <ThemedText type="title" style={styles.title}>Sign In</ThemedText>
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        
-        <TouchableOpacity 
-          style={styles.button} 
-          onPress={handleSignIn}
-          disabled={loading}
-        >
-          <ThemedText style={styles.buttonText}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </ThemedText>
-        </TouchableOpacity>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+          >
+            <ThemedText type="title" style={styles.title}>Sign In</ThemedText>
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+            
+            <TouchableOpacity 
+              style={styles.button} 
+              onPress={handleSignIn}
+              disabled={loading}
+            >
+              <ThemedText style={styles.buttonText}>
+                {loading ? 'Signing in...' : 'Sign In'}
+              </ThemedText>
+            </TouchableOpacity>
 
-        <View style={styles.footer}>
-          <ThemedText>Don't have an account? </ThemedText>
-          <Link href="/auth/sign-up">
-            <ThemedText style={styles.link}>Sign Up</ThemedText>
-          </Link>
-        </View>
-      </View>
+            <View style={styles.footer}>
+              <ThemedText>Don't have an account? </ThemedText>
+              <Pressable onPress={() => router.replace('/auth/sign-up')}>
+                <ThemedText style={styles.link}>Sign Up</ThemedText>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
@@ -72,7 +83,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     padding: 20,
     justifyContent: 'center',
   },
