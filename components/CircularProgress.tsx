@@ -1,27 +1,38 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
-interface CircularProgressProps {
-  percentage: number;
-  radius: number;
+export interface CircularProgressProps {
+  size: number;
   strokeWidth: number;
+  progress: number;
   color: string;
+  backgroundColor?: string;
+  children?: React.ReactNode;
 }
 
-export function CircularProgress({ percentage, radius, strokeWidth, color }: CircularProgressProps) {
-  const circumference = 2 * Math.PI * radius;
-  const progressStroke = ((100 - percentage) * circumference) / 100;
+export function CircularProgress({ 
+  size, 
+  strokeWidth, 
+  progress, 
+  color, 
+  backgroundColor = '#E6E6E6',
+  children 
+}: CircularProgressProps) {
+  const radius = size / 2;
+  const innerRadius = radius - strokeWidth / 2;
+  const circumference = 2 * Math.PI * innerRadius;
+  const progressStroke = circumference - (progress * circumference) / 100;
 
   return (
-    <View>
-      <Svg width={radius * 2} height={radius * 2}>
+    <View style={styles.container}>
+      <Svg width={size} height={size}>
         <Circle
-          stroke="#E6E6E6"
+          stroke={backgroundColor}
           fill="none"
           cx={radius}
           cy={radius}
-          r={radius - strokeWidth / 2}
+          r={innerRadius}
           strokeWidth={strokeWidth}
         />
         <Circle
@@ -29,14 +40,32 @@ export function CircularProgress({ percentage, radius, strokeWidth, color }: Cir
           fill="none"
           cx={radius}
           cy={radius}
-          r={radius - strokeWidth / 2}
+          r={innerRadius}
           strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
+          strokeDasharray={`${circumference} ${circumference}`}
           strokeDashoffset={progressStroke}
           strokeLinecap="round"
           transform={`rotate(-90 ${radius} ${radius})`}
         />
       </Svg>
+      {children && (
+        <View style={[styles.childrenContainer, { width: size, height: size }]}>
+          {children}
+        </View>
+      )}
     </View>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  childrenContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+}); 

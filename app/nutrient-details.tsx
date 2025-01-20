@@ -77,8 +77,8 @@ export default function NutrientDetailsScreen() {
           ) : (
             <>
               <CircularProgress
-                percentage={Math.min((currentAmount / nutrient.target) * 100, 100)}
-                radius={60}
+                progress={Math.min((currentAmount / nutrient.target) * 100, 100)}
+                size={120}
                 strokeWidth={12}
                 color="#0368F0"
               />

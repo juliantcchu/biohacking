@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { startOfDay, endOfDay } from 'date-fns';
 import { NUTRIENTS } from '@/lib/nutrients';
+import { CircularProgress } from '@/components/CircularProgress';
 
 interface Meal {
   nutrient_content: {
@@ -18,6 +19,7 @@ interface Meal {
 export default function HomeScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [healthScore, setHealthScore] = useState(1);
   const [dailyTotals, setDailyTotals] = useState<Record<string, number>>(
     Object.keys(NUTRIENTS).reduce((acc, nutrient) => {
       acc[nutrient] = 0;
@@ -28,6 +30,15 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchTodaysMeals();
   }, []);
+
+  const calculateHealthScore = (totals: Record<string, number>) => {
+    const scores = Object.entries(NUTRIENTS).map(([nutrient, { target }]) => {
+      const achieved = totals[nutrient] || 0;
+      const score = Math.min(achieved / target, 1);
+      return isNaN(score) ? 0 : score;
+    });
+    return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length * 100);
+  };
 
   const fetchTodaysMeals = async () => {
     try {
@@ -54,6 +65,7 @@ export default function HomeScreen() {
       }, {} as Record<string, number>);
 
       setDailyTotals(totals);
+      setHealthScore(calculateHealthScore(totals));
     } catch (error) {
       console.error('Error fetching meals:', error);
     } finally {
@@ -82,16 +94,33 @@ export default function HomeScreen() {
             <ThemedText style={styles.loadingText}>Loading nutrients...</ThemedText>
           </View>
         ) : (
-          Object.entries(NUTRIENTS).map(([nutrient, { target, unit, purpose }]) => (
-            <NutrientCard
-              key={nutrient}
-              name={nutrient}
-              purpose={purpose}
-              current={dailyTotals[nutrient] || 0}
-              target={target}
-              unit={unit}
-            />
-          ))
+          <>
+            {/* <View style={[styles.card, styles.scoreContainer]}>
+              <View style={styles.scoreRow}>
+                <CircularProgress
+                  size={120}
+                  strokeWidth={15}
+                  progress={healthScore}
+                  color="#0368F0"
+                  backgroundColor="#eee"
+                />
+                <View style={styles.scoreTextContainer}>
+                  <ThemedText style={styles.scoreNumber}>{healthScore}%</ThemedText>
+                  <ThemedText style={styles.scoreLabel}>Health Score</ThemedText>
+                </View>
+              </View>
+            </View> */}
+            {Object.entries(NUTRIENTS).map(([nutrient, { target, unit, purpose }]) => (
+              <NutrientCard
+                key={nutrient}
+                name={nutrient}
+                purpose={purpose}
+                current={dailyTotals[nutrient] || 0}
+                target={target}
+                unit={unit}
+              />
+            ))}
+          </>
         )}
       </ScrollView>
     </ThemedView>
@@ -125,6 +154,42 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  scoreContainer: {
+    marginBottom: 20,
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
+  },
+  scoreTextContainer: {
+    flex: 1,
+  },
+  scoreNumber: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#0368F0',
+    marginBottom: 4,
+    includeFontPadding: false,
+    lineHeight: 54,
+  },
+  scoreLabel: {
     fontSize: 16,
     color: '#666',
   },
