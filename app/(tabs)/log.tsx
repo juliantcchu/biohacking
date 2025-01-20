@@ -29,8 +29,9 @@ export default function LogScreen() {
   const takePicture = async () => {
     try {
       const photo = await cameraView.current?.takePictureAsync({
-        width: CAMERA_SIZE,
-        height: CAMERA_SIZE,
+        quality: 1,
+        base64: true,
+        exif: false,
       });
       if (photo) {
         router.push({ 

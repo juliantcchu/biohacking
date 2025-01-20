@@ -1,221 +1,227 @@
 import { router } from 'expo-router';
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, FlatList, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Modal, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { supabase } from '@/lib/supabase';
+import { format, parseISO } from 'date-fns';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const IMAGE_SIZE = 80;
 
-// Dummy data for logged meals grouped by date
-const LOGGED_MEALS = {
-  'Today': [
-    {
-      id: 1,
-      time: '2:30 PM',
-      imageUri: 'https://picsum.photos/400/400',
-      name: 'Fish Oil Capsules',
-      nutrients: [
-        { name: 'Omega-3', amount: '1.2g' },
-        { name: 'Vitamin D3', amount: '2000IU' },
-      ]
-    },
-    {
-      id: 2, 
-      time: '9:30 AM',
-      imageUri: 'https://picsum.photos/401/400',
-      name: 'Morning Supplements',
-      nutrients: [
-        { name: 'Creatine', amount: '5g' },
-        { name: 'Choline', amount: '300mg' },
-      ]
-    }
-  ],
-  'Yesterday': [
-    {
-      id: 3,
-      time: '3:45 PM', 
-      imageUri: 'https://picsum.photos/402/400',
-      name: 'Evening Stack',
-      nutrients: [
-        { name: 'Phosphatidylserine', amount: '200mg' },
-        { name: 'Omega-3', amount: '0.8g' },
-      ]
-    }
-  ]
-};
+interface Meal {
+  id: string;
+  created_at: string;
+  image_id: string;
+  user_id: string;
+  nutrient_content: {
+    'Omega-3': number;
+    'Phosphatidylserine': number;
+    'Choline': number;
+    'Creatine': number;
+    'Vitamin D3': number;
+  };
+  confirmed: boolean;
+  notes: string;
+}
 
-// Dummy data for daily nutrient totals
-const DAILY_NUTRIENTS = [
-  {
-    date: 'Today',
-    fullDate: '2024-01-17',
-    nutrients: [
-      { name: 'Omega-3', amount: '2.0g', target: '2.0g' },
-      { name: 'Vitamin D3', amount: '2000IU', target: '4000IU' },
-      { name: 'Creatine', amount: '5g', target: '5g' },
-      { name: 'Choline', amount: '300mg', target: '500mg' },
-    ]
-  },
-  {
-    date: 'Yesterday',
-    fullDate: '2024-01-16',
-    nutrients: [
-      { name: 'Omega-3', amount: '0.8g', target: '2.0g' },
-      { name: 'Phosphatidylserine', amount: '200mg', target: '300mg' },
-      { name: 'Vitamin D3', amount: '1000IU', target: '4000IU' },
-    ]
-  },
-  {
-    date: 'Jan 15',
-    fullDate: '2024-01-15',
-    nutrients: [
-      { name: 'Omega-3', amount: '1.5g', target: '2.0g' },
-      { name: 'Vitamin D3', amount: '3000IU', target: '4000IU' },
-    ]
-  }
-];
+interface GroupedMeals {
+  [key: string]: Meal[];
+}
+
+type NutrientKey = 'Omega-3' | 'Phosphatidylserine' | 'Choline' | 'Creatine' | 'Vitamin D3';
+
+interface DailyNutrients {
+  [key: string]: Record<NutrientKey, number>;
+}
+
+const NUTRIENT_UNITS: Record<NutrientKey, string> = {
+  'Omega-3': 'g',
+  'Phosphatidylserine': 'mg',
+  'Choline': 'mg',
+  'Creatine': 'g',
+  'Vitamin D3': 'IU'
+};
 
 export default function HistoryScreen() {
   const [activeTab, setActiveTab] = useState('meals');
   const [selectedDate, setSelectedDate] = useState(0);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [meals, setMeals] = useState<GroupedMeals>({});
+  const [dailyNutrients, setDailyNutrients] = useState<DailyNutrients>({});
+  const [loading, setLoading] = useState(true);
 
-  const handleMealPress = (meal: typeof LOGGED_MEALS['Today'][0]) => {
+  useEffect(() => {
+    fetchMeals();
+  }, []);
+
+  const fetchMeals = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: mealsData, error } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Group meals by date
+      const grouped = (mealsData || []).reduce<GroupedMeals>((acc, meal) => {
+        const date = format(parseISO(meal.created_at), 'yyyy-MM-dd');
+        const displayDate = isToday(date) ? 'Today' : 
+                          isYesterday(date) ? 'Yesterday' : 
+                          format(parseISO(date), 'MMM d');
+        
+        if (!acc[displayDate]) {
+          acc[displayDate] = [];
+        }
+        acc[displayDate].push(meal);
+        return acc;
+      }, {});
+
+      // Calculate daily nutrient totals
+      const dailyTotals = (mealsData || []).reduce<DailyNutrients>((acc, meal) => {
+        const date = format(parseISO(meal.created_at), 'yyyy-MM-dd');
+        const displayDate = isToday(date) ? 'Today' : 
+                          isYesterday(date) ? 'Yesterday' : 
+                          format(parseISO(date), 'MMM d');
+
+        if (!acc[displayDate]) {
+          acc[displayDate] = {
+            'Omega-3': 0,
+            'Phosphatidylserine': 0,
+            'Choline': 0,
+            'Creatine': 0,
+            'Vitamin D3': 0
+          };
+        }
+
+        Object.entries(meal.nutrient_content as Record<NutrientKey, number>).forEach(([nutrient, value]) => {
+          acc[displayDate][nutrient as NutrientKey] += value;
+        });
+
+        return acc;
+      }, {});
+
+      setMeals(grouped);
+      setDailyNutrients(dailyTotals);
+    } catch (error) {
+      console.error('Error fetching meals:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isToday = (date: string) => {
+    return format(new Date(), 'yyyy-MM-dd') === date;
+  };
+
+  const isYesterday = (date: string) => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return format(yesterday, 'yyyy-MM-dd') === date;
+  };
+
+  const getImageUrl = (meal: Meal) => {
+    return supabase.storage
+      .from('uploaded-images')
+      .getPublicUrl(`${meal.user_id}/${meal.image_id}.jpg`).data.publicUrl;
+  };
+
+  const formatAmount = (nutrient: NutrientKey, value: number) => {
+    return `${value}${NUTRIENT_UNITS[nutrient]}`;
+  };
+
+  const handleMealPress = (meal: Meal) => {
     router.push({
       pathname: '/meal-details',
       params: {
         id: meal.id,
-        imageUri: meal.imageUri,
-        time: meal.time,
-        name: meal.name,
+        imageUri: getImageUrl(meal),
+        time: format(parseISO(meal.created_at), 'h:mm a'),
+        nutrients: JSON.stringify(meal.nutrient_content),
+        name: meal.notes
       }
     });
   };
 
   const renderMealList = () => (
     <ScrollView style={styles.scrollContainer}>
-      {Object.entries(LOGGED_MEALS).map(([date, meals]) => (
-        <View key={date}>
-          <ThemedText style={styles.dateHeader}>{date}</ThemedText>
-          {meals.map((meal) => (
-            <TouchableOpacity 
-              key={meal.id} 
-              style={styles.mealCard}
-              onPress={() => handleMealPress(meal)}
-            >
-              <Image 
-                source={{ uri: meal.imageUri }} 
-                style={styles.mealImage}
-              />
-              <View style={styles.mealInfo}>
-                <ThemedText style={styles.mealName}>{meal.name}</ThemedText>
-                <ThemedText style={styles.time}>{meal.time}</ThemedText>
-              </View>
-            </TouchableOpacity>
-          ))}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0368F0" />
+          <ThemedText style={styles.loadingText}>Loading meals...</ThemedText>
         </View>
-      ))}
+      ) : Object.entries(meals).length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <IconSymbol name="tray.fill" size={48} color="#666" />
+          <ThemedText style={styles.emptyText}>No meals logged yet</ThemedText>
+        </View>
+      ) : (
+        Object.entries(meals).map(([date, dayMeals]) => (
+          <View key={date}>
+            <ThemedText style={styles.dateHeader}>{date}</ThemedText>
+            {dayMeals.map((meal) => (
+              <TouchableOpacity 
+                key={meal.id} 
+                style={styles.mealCard}
+                onPress={() => handleMealPress(meal)}
+              >
+                <Image 
+                  source={{ uri: getImageUrl(meal) }} 
+                  style={styles.mealImage}
+                />
+                <View style={styles.mealInfo}>
+                  <ThemedText style={styles.mealName}>
+                    {meal.notes || 'Meal'}
+                  </ThemedText>
+                  <ThemedText style={styles.time}>
+                    {format(parseISO(meal.created_at), 'h:mm a')}
+                  </ThemedText>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ))
+      )}
     </ScrollView>
   );
 
-  const handlePrevDate = () => {
-    if (selectedDate < DAILY_NUTRIENTS.length - 1) {
-      setSelectedDate(selectedDate + 1);
-    }
-  };
-
-  const handleNextDate = () => {
-    if (selectedDate > 0) {
-      setSelectedDate(selectedDate - 1);
-    }
-  };
-
   const renderNutrientList = () => (
-    <View style={styles.nutrientContainer}>
-      <View style={styles.dateNavigator}>
-        <TouchableOpacity 
-          onPress={handlePrevDate}
-          style={styles.dateArrow}
-        >
-          <IconSymbol size={24} name="chevron.left" />
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => setDatePickerVisible(true)}
-          style={styles.datePickerButton}
-        >
-          <ThemedText style={styles.dateHeader}>
-            {DAILY_NUTRIENTS[selectedDate].date}
-          </ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={handleNextDate}
-          style={styles.dateArrow}
-        >
-          <IconSymbol size={24} name="chevron.right" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView 
-        horizontal 
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
-          const newIndex = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-          setSelectedDate(newIndex);
-        }}
-      >
-        {DAILY_NUTRIENTS.map((day, index) => (
-          <View key={day.date} style={[styles.nutrientPage, { width: SCREEN_WIDTH }]}>
-            {day.nutrients.map((nutrient, i) => (
-              <View key={i} style={styles.nutrientRow}>
-                <ThemedText style={styles.nutrientName}>{nutrient.name}</ThemedText>
-                <ThemedText style={styles.nutrientAmount}>
-                  {nutrient.amount} / {nutrient.target}
-                </ThemedText>
-              </View>
-            ))}
-          </View>
-        ))}
-      </ScrollView>
-
-      <Modal
-        visible={datePickerVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setDatePickerVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <ThemedText style={styles.modalHeader}>Select Date</ThemedText>
-            {DAILY_NUTRIENTS.map((day, index) => (
-              <TouchableOpacity
-                key={day.date}
-                style={styles.dateOption}
-                onPress={() => {
-                  setSelectedDate(index);
-                  setDatePickerVisible(false);
-                }}
-              >
-                <ThemedText style={[
-                  styles.dateOptionText,
-                  selectedDate === index && styles.selectedDateText
-                ]}>
-                  {day.date} ({day.fullDate})
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setDatePickerVisible(false)}
-            >
-              <ThemedText style={styles.closeButtonText}>Close</ThemedText>
-            </TouchableOpacity>
-          </View>
+    <ScrollView style={styles.scrollContainer}>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0368F0" />
+          <ThemedText style={styles.loadingText}>Loading nutrients...</ThemedText>
         </View>
-      </Modal>
-    </View>
+      ) : Object.entries(dailyNutrients).length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <IconSymbol name="chart.bar.fill" size={48} color="#666" />
+          <ThemedText style={styles.emptyText}>No nutrient data available</ThemedText>
+        </View>
+      ) : (
+        Object.entries(dailyNutrients).map(([date, nutrients]) => (
+          <View key={date} style={styles.nutrientDateGroup}>
+            <ThemedText style={styles.dateHeader}>{date}</ThemedText>
+            <View style={styles.nutrientCard}>
+              {Object.entries(nutrients).map(([nutrient, value]) => (
+                <View key={nutrient} style={styles.nutrientRow}>
+                  <ThemedText style={styles.nutrientName}>{nutrient}</ThemedText>
+                  <ThemedText style={styles.nutrientValue}>
+                    {formatAmount(nutrient as NutrientKey, value)}
+                  </ThemedText>
+                </View>
+              ))}
+            </View>
+          </View>
+        ))
+      )}
+    </ScrollView>
   );
 
   return (
@@ -291,24 +297,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
-  dateNavigator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  dateArrow: {
-    padding: 10,
-  },
-  dateArrowText: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  datePickerButton: {
-    flex: 1,
-    alignItems: 'center',
-  },
   mealCard: {
     flexDirection: 'row',
     backgroundColor: 'white',
@@ -330,79 +318,67 @@ const styles = StyleSheet.create({
   mealInfo: {
     flex: 1,
     marginLeft: 16,
-    justifyContent: 'center',
-  },
-  mealName: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 4,
   },
   time: {
     fontSize: 15,
     color: '#666',
+    marginBottom: 4,
   },
-  nutrientContainer: {
+  mealName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 40,
   },
-  nutrientPage: {
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 40,
+  },
+  emptyText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  nutrientDateGroup: {
+    marginBottom: 20,
+  },
+  nutrientCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   nutrientRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    alignItems: 'center',
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#f0f0f0',
   },
   nutrientName: {
     fontSize: 16,
+    color: '#333',
+  },
+  nutrientValue: {
+    fontSize: 16,
     fontWeight: '500',
-  },
-  nutrientAmount: {
-    fontSize: 16,
-    color: '#666',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    width: '80%',
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  dateOption: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  dateOptionText: {
-    fontSize: 16,
-  },
-  selectedDateText: {
     color: '#0368F0',
-    fontWeight: '600',
-  },
-  closeButton: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#0368F0',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
   },
 }); 

@@ -5,11 +5,29 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
 export default function MealDetailsScreen() {
-  const { imageUri, date, name } = useLocalSearchParams<{ 
+  const { imageUri, time, nutrients, name } = useLocalSearchParams<{ 
     imageUri: string;
-    date: string;
+    time: string;
+    nutrients: string;
     name: string;
   }>();
+
+  const nutrientContent = JSON.parse(nutrients || '{}');
+
+  const formatAmount = (nutrient: string, value: number) => {
+    switch (nutrient) {
+      case 'Omega-3':
+      case 'Creatine':
+        return `${value}g`;
+      case 'Phosphatidylserine':
+      case 'Choline':
+        return `${value}mg`;
+      case 'Vitamin D3':
+        return `${value}IU`;
+      default:
+        return `${value}`;
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -20,7 +38,7 @@ export default function MealDetailsScreen() {
         >
           <IconSymbol name="chevron.left" size={24} color="#000" />
         </TouchableOpacity>
-        <ThemedText type="title" style={styles.title}>{name}</ThemedText>
+        <ThemedText type="title" style={styles.title} numberOfLines={1} ellipsizeMode="tail">{name}</ThemedText>
         <View style={styles.backButton} />
       </View>
       <ScrollView>
@@ -32,18 +50,18 @@ export default function MealDetailsScreen() {
           />
         </View>
         <View style={styles.content}>
-          <ThemedText style={styles.date}>{date}</ThemedText>
+          <ThemedText style={styles.date}>{time}</ThemedText>
           <View style={styles.section}>
             <ThemedText style={styles.sectionTitle}>Nutrients</ThemedText>
             <View style={styles.nutrientList}>
-              <View style={styles.nutrientItem}>
-                <ThemedText style={styles.nutrientName}>Omega-3</ThemedText>
-                <ThemedText style={styles.nutrientAmount}>1.2g</ThemedText>
-              </View>
-              <View style={styles.nutrientItem}>
-                <ThemedText style={styles.nutrientName}>Vitamin D3</ThemedText>
-                <ThemedText style={styles.nutrientAmount}>2000IU</ThemedText>
-              </View>
+              {Object.entries(nutrientContent).map(([nutrient, value]) => (
+                <View key={nutrient} style={styles.nutrientItem}>
+                  <ThemedText style={styles.nutrientName}>{nutrient}</ThemedText>
+                  <ThemedText style={styles.nutrientAmount}>
+                    {formatAmount(nutrient, value as number)}
+                  </ThemedText>
+                </View>
+              ))}
             </View>
           </View>
         </View>
@@ -76,6 +94,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
+    flex: 1,
+    marginHorizontal: 12,
   },
   image: {
     width: '100%',

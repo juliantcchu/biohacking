@@ -1,29 +1,96 @@
 import { useLocalSearchParams, router } from 'expo-router';
-import React from 'react';
-import { View, StyleSheet, Image, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { supabase } from '@/lib/supabase';
+import * as FileSystem from 'expo-file-system';
+
+interface NutrientEstimates {
+  'Omega-3': number;
+  'Phosphatidylserine': number;
+  'Choline': number;
+  'Creatine': number;
+  'Vitamin D3': number;
+}
 
 export default function ReviewScreen() {
   const { photoUri } = useLocalSearchParams<{ photoUri: string }>();
+  const [loading, setLoading] = useState(true);
+  const [imageId, setImageId] = useState<string | null>(null);
+  const [estimates, setEstimates] = useState<NutrientEstimates | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleConfirm = () => {
-    // TODO: Save the photo and log the supplement intake
-    router.replace('/(tabs)');
+  useEffect(() => {
+    analyzeImage();
+  }, []);
+
+  const analyzeImage = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Read the image file and convert to base64
+      const base64 = await FileSystem.readAsStringAsync(photoUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Get the current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Call the edge function
+      const { data, error: functionError } = await supabase.functions.invoke('estimate-nutrient-content', {
+        body: { user_id: user.id, image_base64: base64 }
+      });
+
+      if (functionError) throw functionError;
+      
+      setImageId(data.image_id);
+      setEstimates(data.estimates);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to analyze image');
+      console.error('Error analyzing image:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    try {
+      if (!imageId) return;
+      
+      const { error: updateError } = await supabase
+        .from('meals')
+        .update({ confirmed: true })
+        .eq('image_id', imageId);
+
+      if (updateError) throw updateError;
+      
+      router.replace('/(tabs)');
+    } catch (err) {
+      console.error('Error confirming meal:', err);
+    }
   };
 
   const handleRetake = () => {
     router.back();
   };
 
-  // Dummy nutrient data
-  const nutrients = [
-    { name: 'Omega-3', amount: '1.2g', dailyValue: '60%' },
-    { name: 'Phosphatidylserine', amount: '200mg', dailyValue: '67%' },
-    { name: 'Choline', amount: '400mg', dailyValue: '80%' },
-    { name: 'Creatine', amount: '3g', dailyValue: '60%' },
-    { name: 'Vitamin D3', amount: '2000IU', dailyValue: '50%' },
-  ];
+  const formatAmount = (nutrient: keyof NutrientEstimates, value: number) => {
+    switch (nutrient) {
+      case 'Omega-3':
+      case 'Creatine':
+        return `${value}g`;
+      case 'Phosphatidylserine':
+      case 'Choline':
+        return `${value}mg`;
+      case 'Vitamin D3':
+        return `${value}IU`;
+      default:
+        return `${value}`;
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -37,15 +104,28 @@ export default function ReviewScreen() {
         </View>
         <View style={styles.nutrientContainer}>
           <ThemedText style={styles.title}>Nutrient Content</ThemedText>
-          {nutrients.map((nutrient, index) => (
-            <View key={index} style={styles.nutrientRow}>
-              <ThemedText style={styles.nutrientName}>{nutrient.name}</ThemedText>
-              <View style={styles.nutrientValues}>
-                <ThemedText style={styles.amount}>{nutrient.amount}</ThemedText>
-                <ThemedText style={styles.dailyValue}>{nutrient.dailyValue}</ThemedText>
-              </View>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#0368F0" />
+              <ThemedText style={styles.loadingText}>Analyzing image...</ThemedText>
             </View>
-          ))}
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <IconSymbol name="exclamationmark.triangle" size={24} color="#FF3B30" />
+              <ThemedText style={styles.errorText}>{error}</ThemedText>
+            </View>
+          ) : estimates && (
+            Object.entries(estimates).map(([nutrient, value], index) => (
+              <View key={index} style={styles.nutrientRow}>
+                <ThemedText style={styles.nutrientName}>{nutrient}</ThemedText>
+                <View style={styles.nutrientValues}>
+                  <ThemedText style={styles.amount}>
+                    {formatAmount(nutrient as keyof NutrientEstimates, value)}
+                  </ThemedText>
+                </View>
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
       <View style={styles.controls}>
@@ -59,6 +139,7 @@ export default function ReviewScreen() {
         <TouchableOpacity 
           style={[styles.button, styles.confirmButton]} 
           onPress={handleConfirm}
+          disabled={loading || !!error}
         >
           <IconSymbol name="checkmark" size={24} color="white" />
           <ThemedText style={styles.confirmText}>Confirm</ThemedText>
@@ -143,5 +224,25 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     color: 'white',
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF3B30',
   },
 });

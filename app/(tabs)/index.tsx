@@ -1,51 +1,85 @@
-import { StyleSheet, ScrollView, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { NutrientCard } from '@/components/NutrientCard';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter } from 'expo-router';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { startOfDay, endOfDay } from 'date-fns';
 
-const NUTRIENTS = [
-  {
-    name: 'Omega-3',
-    purpose: 'Brain function & mood regulation',
-    current: 1.2,
-    target: 2,
-    unit: 'g'
-  },
-  {
-    name: 'Phosphatidylserine',
-    purpose: 'Cognitive function & memory',
-    current: 200,
-    target: 300,
-    unit: 'mg'
-  },
-  {
-    name: 'Choline',
-    purpose: 'Focus & memory support',
-    current: 400,
-    target: 500,
-    unit: 'mg'
-  },
-  {
-    name: 'Creatine',
-    purpose: 'Brain function & muscle strength',
-    current: 3,
-    target: 5,
-    unit: 'g'
-  },
-  {
-    name: 'Vitamin D3',
-    purpose: 'Hormonal & bone health',
-    current: 2000,
-    target: 4000,
-    unit: 'IU'
-  },
-  // Add other nutrients as needed
-];
+interface Meal {
+  nutrient_content: {
+    'Omega-3': number;
+    'Phosphatidylserine': number;
+    'Choline': number;
+    'Creatine': number;
+    'Vitamin D3': number;
+  };
+}
+
+const TARGET_NUTRIENTS = {
+  'Omega-3': { target: 2, unit: 'g' },
+  'Phosphatidylserine': { target: 300, unit: 'mg' },
+  'Choline': { target: 500, unit: 'mg' },
+  'Creatine': { target: 5, unit: 'g' },
+  'Vitamin D3': { target: 4000, unit: 'IU' }
+};
+
+const NUTRIENT_PURPOSES: Record<keyof typeof TARGET_NUTRIENTS, string> = {
+  'Omega-3': 'Brain function & mood regulation',
+  'Phosphatidylserine': 'Cognitive function & memory',
+  'Choline': 'Focus & memory support',
+  'Creatine': 'Brain function & muscle strength',
+  'Vitamin D3': 'Hormonal & bone health'
+};
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [dailyTotals, setDailyTotals] = useState<Record<string, number>>({
+    'Omega-3': 0,
+    'Phosphatidylserine': 0,
+    'Choline': 0,
+    'Creatine': 0,
+    'Vitamin D3': 0
+  });
+
+  useEffect(() => {
+    fetchTodaysMeals();
+  }, []);
+
+  const fetchTodaysMeals = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date();
+      const { data: meals, error } = await supabase
+        .from('meals')
+        .select('nutrient_content')
+        .eq('user_id', user.id)
+        .gte('created_at', startOfDay(today).toISOString())
+        .lte('created_at', endOfDay(today).toISOString());
+
+      if (error) throw error;
+
+      // Calculate totals from all meals
+      const totals = (meals || []).reduce((acc, meal: Meal) => {
+        Object.entries(meal.nutrient_content).forEach(([nutrient, value]) => {
+          acc[nutrient] = (acc[nutrient] || 0) + value;
+        });
+        return acc;
+      }, {} as Record<string, number>);
+
+      setDailyTotals(totals);
+    } catch (error) {
+      console.error('Error fetching meals:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -62,16 +96,24 @@ export default function HomeScreen() {
             <IconSymbol size={32} name="person.circle.fill" color="#000" />
           </TouchableOpacity>
         </View>
-        {NUTRIENTS.map((nutrient, index) => (
-          <NutrientCard
-            key={index}
-            name={nutrient.name}
-            purpose={nutrient.purpose}
-            current={nutrient.current}
-            target={nutrient.target}
-            unit={nutrient.unit}
-          />
-        ))}
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#0368F0" />
+            <ThemedText style={styles.loadingText}>Loading nutrients...</ThemedText>
+          </View>
+        ) : (
+          Object.entries(TARGET_NUTRIENTS).map(([nutrient, { target, unit }]: [keyof typeof TARGET_NUTRIENTS, { target: number, unit: string }]) => (
+            <NutrientCard
+              key={nutrient}
+              name={nutrient}
+              purpose={NUTRIENT_PURPOSES[nutrient]}
+              current={dailyTotals[nutrient] || 0}
+              target={target}
+              unit={unit}
+            />
+          ))
+        )}
       </ScrollView>
     </ThemedView>
   );
@@ -92,6 +134,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   profileButton: {
-    marginTop:-5,
+    marginTop: -5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
 });
