@@ -5,13 +5,10 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import * as FileSystem from 'expo-file-system';
+import { NUTRIENTS } from '@/lib/nutrients';
 
-interface NutrientEstimates {
-  'Omega-3': number;
-  'Phosphatidylserine': number;
-  'Choline': number;
-  'Creatine': number;
-  'Vitamin D3': number;
+type NutrientEstimates = {
+  [K in keyof typeof NUTRIENTS]: number
 }
 
 export default function ReviewScreen() {
@@ -78,18 +75,8 @@ export default function ReviewScreen() {
   };
 
   const formatAmount = (nutrient: keyof NutrientEstimates, value: number) => {
-    switch (nutrient) {
-      case 'Omega-3':
-      case 'Creatine':
-        return `${value}g`;
-      case 'Phosphatidylserine':
-      case 'Choline':
-        return `${value}mg`;
-      case 'Vitamin D3':
-        return `${value}IU`;
-      default:
-        return `${value}`;
-    }
+    const nutrientInfo = NUTRIENTS[nutrient];
+    return `${value}${nutrientInfo.unit}`;
   };
 
   return (
@@ -107,7 +94,7 @@ export default function ReviewScreen() {
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#0368F0" />
-              <ThemedText style={styles.loadingText}>Analyzing image...</ThemedText>
+              <ThemedText style={styles.loadingText}>Analyzing nutrient contents...</ThemedText>
             </View>
           ) : error ? (
             <View style={styles.errorContainer}>
@@ -137,7 +124,11 @@ export default function ReviewScreen() {
           <ThemedText>Retake</ThemedText>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.button, styles.confirmButton]} 
+          style={[
+            styles.button, 
+            styles.confirmButton,
+            (loading || !!error) && styles.disabledButton
+          ]} 
           onPress={handleConfirm}
           disabled={loading || !!error}
         >
@@ -221,6 +212,9 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     backgroundColor: '#0368F0',
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
   confirmText: {
     color: 'white',

@@ -9,17 +9,101 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import OpenAI from 'https://deno.land/x/openai@v4.24.0/mod.ts'
 
+// Import nutrient configuration
+const NUTRIENTS = {
+  'Omega-3': {
+    target: 2,
+    unit: 'g',
+    purpose: 'Brain function & mood regulation',
+    sources: 'Fatty fish (salmon, mackerel, sardines), flaxseeds, chia seeds, walnuts',
+    recommendations: 'Eat fatty fish 2-3 times per week or take a fish oil supplement'
+  },
+  'Choline': {
+    target: 500,
+    unit: 'mg', 
+    purpose: 'Focus & memory support',
+    sources: 'Eggs, liver, beef, chicken, fish, soybeans, quinoa',
+    recommendations: 'Eat 2-3 eggs daily or include organ meats weekly'
+  },
+  'Magnesium': {
+    target: 400,
+    unit: 'mg',
+    purpose: 'Neurotransmitter regulation & stress management', 
+    sources: 'Dark leafy greens, nuts, seeds, whole grains, dark chocolate',
+    recommendations: 'Include magnesium-rich foods daily or supplement with magnesium glycinate if needed'
+  },
+  'Vitamin D3': {
+    target: 4000,
+    unit: 'IU',
+    purpose: 'Hormonal & bone health, cognitive support',
+    sources: 'Sunlight exposure, fatty fish, egg yolks, fortified foods',
+    recommendations: 'Get 15-30 minutes of sunlight daily or supplement, especially in winter months'
+  },
+  'L-Theanine': {
+    target: 200,
+    unit: 'mg',
+    purpose: 'Focus, relaxation, and alpha brain wave enhancement',
+    sources: 'Green tea, matcha',
+    recommendations: 'Drink 2-3 cups of green tea daily or supplement for relaxation and focus'
+  },
+  'Curcumin': {
+    target: 500,
+    unit: 'mg',
+    purpose: 'Neuroprotection & anti-inflammatory effects',
+    sources: 'Turmeric (with black pepper for better absorption)',
+    recommendations: 'Use turmeric in cooking or supplement with a curcumin extract with piperine'
+  },
+  'Vitamin B Complex': {
+    target: 'Varies',
+    unit: 'mg/mcg',
+    purpose: 'Neurotransmitter production, energy metabolism, and myelin health',
+    sources: 'Leafy greens, eggs, meat, fortified foods',
+    recommendations: 'Include B-rich foods daily or supplement with a high-quality B-complex'
+  },
+  'Phosphatidylserine': {
+    target: 300,
+    unit: 'mg',
+    purpose: 'Cognitive function & memory',
+    sources: 'Soy lecithin, white beans, egg yolks, chicken liver, mackerel',
+    recommendations: 'Include soy products and organ meats in diet, or consider supplementation'
+  },
+  'Iron': {
+    target: 18,
+    unit: 'mg',
+    purpose: 'Oxygen transport & cognitive focus',
+    sources: 'Red meat, spinach, legumes, fortified cereals',
+    recommendations: 'Consume iron-rich foods with vitamin C for better absorption; supplement if deficient'
+  },
+  'Zinc': {
+    target: 11,
+    unit: 'mg',
+    purpose: 'Neurogenesis & immune support',
+    sources: 'Shellfish, seeds, nuts, meat',
+    recommendations: 'Include zinc-rich foods regularly or supplement during periods of stress or illness'
+  },
+  'Selenium': {
+    target: 55,
+    unit: 'mcg',
+    purpose: 'Antioxidant protection & cognitive health',
+    sources: 'Brazil nuts, fish, eggs, whole grains',
+    recommendations: 'Eat 1-2 Brazil nuts daily or include selenium-rich foods in meals'
+  },
+  'Alpha-GPC': {
+    target: 500,
+    unit: 'mg',
+    purpose: 'Acetylcholine production & focus',
+    sources: 'Supplements (rare in significant quantities in food)',
+    recommendations: 'Supplement daily for enhanced memory and focus, especially in aging adults'
+  }
+};
+
 interface RequestBody {
   user_id: string
   image_base64: string
 }
 
-interface NutrientEstimates {
-  'Omega-3': number
-  'Phosphatidylserine': number
-  'Choline': number
-  'Creatine': number
-  'Vitamin D3': number
+type NutrientEstimates = {
+  [K in keyof typeof NUTRIENTS]: number
 }
 
 function base64ToBuffer(base64: string): Uint8Array {
@@ -39,7 +123,6 @@ function base64ToBuffer(base64: string): Uint8Array {
 }
 
 serve(async (req) => {
-  console.log('Request received')
   try {
     const { user_id, image_base64 } = await req.json() as RequestBody
 
@@ -47,20 +130,15 @@ serve(async (req) => {
       throw new Error('Missing required fields')
     }
 
-    console.log('User ID:', user_id)
-    console.log('Image base64 length:', image_base64.length)
-
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('BACKEND_SUPABASE_URL')
     const supabaseKey = Deno.env.get('BACKEND_SUPABASE_SERVICE_ROLE_KEY')
 
     if (!supabaseUrl || !supabaseKey) {
       console.error('Missing Supabase environment variables')
-      console.log('Available env vars:', Object.keys(Deno.env.toObject()))
       throw new Error('Missing Supabase environment variables')
     }
 
-    console.log('Supabase URL:', supabaseUrl)
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Initialize OpenAI client
@@ -74,7 +152,6 @@ serve(async (req) => {
     })
 
     // Call OpenAI API with GPT-4 Vision
-    console.log('Calling OpenAI API...')
     const chatCompletion = await openai.chat.completions.create({
       model: 'gpt-4o',
       response_format: { type: "json_object" },
@@ -86,12 +163,10 @@ serve(async (req) => {
               type: 'text',
               text: `Based on this image, give the meal a short descriptive name and estimate the content of these nutrients. Return a JSON object with the name and estimated nutrient values:
 {
-  "name": "Grilled Salmon with Rice",  // Short descriptive name of the meal
-  "Omega-3": 0.5,        // in grams
-  "Phosphatidylserine": 25,  // in mg
-  "Choline": 150,        // in mg
-  "Creatine": 0.2,       // in grams
-  "Vitamin D3": 400      // in IU
+  "name": "Example Meal Name",  // Short descriptive name of the meal
+  ${Object.entries(NUTRIENTS).map(([nutrient, { unit }]) => 
+    `  "${nutrient}": ${NUTRIENTS[nutrient].target/10},        // in ${unit}`
+  ).join('\n')}
 }`
             },
             {
@@ -107,7 +182,6 @@ serve(async (req) => {
     })
 
     const responseText = chatCompletion.choices[0].message?.content;
-    console.log('OpenAI response:', responseText)
 
     if (!responseText) {
       throw new Error('No response from OpenAI')
@@ -119,36 +193,26 @@ serve(async (req) => {
     try {
       parsedResponse = JSON.parse(responseText)
       mealName = parsedResponse.name || 'Meal'
-      estimates = {
-        'Omega-3': parsedResponse['Omega-3'],
-        'Phosphatidylserine': parsedResponse['Phosphatidylserine'],
-        'Choline': parsedResponse['Choline'],
-        'Creatine': parsedResponse['Creatine'],
-        'Vitamin D3': parsedResponse['Vitamin D3']
-      }
-      console.log('Parsed estimates:', estimates)
+      estimates = Object.keys(NUTRIENTS).reduce((acc, nutrient) => {
+        acc[nutrient] = parsedResponse[nutrient] || 0;
+        return acc;
+      }, {} as NutrientEstimates);
     } catch (error) {
       console.error('Failed to parse OpenAI response:', error)
       mealName = 'Untitled Meal'
-      estimates = {
-        'Omega-3': 0,
-        'Phosphatidylserine': 0,
-        'Choline': 0,
-        'Creatine': 0,
-        'Vitamin D3': 0
-      }
+      estimates = Object.keys(NUTRIENTS).reduce((acc, nutrient) => {
+        acc[nutrient] = 0;
+        return acc;
+      }, {} as NutrientEstimates);
     }
 
     // Generate unique image ID
     const image_id = crypto.randomUUID()
-    console.log('Generated image_id:', image_id)
 
     // Convert base64 to binary data
     const imageData = base64ToBuffer(image_base64)
-    console.log('Converted image data length:', imageData.length)
 
     // Save image to storage
-    console.log('Uploading to storage...')
     const { error: uploadError } = await supabase.storage
       .from('uploaded-images')
       .upload(`${user_id}/${image_id}.jpg`, imageData, {
@@ -161,10 +225,7 @@ serve(async (req) => {
       throw new Error(`Failed to upload image: ${uploadError.message}`)
     }
 
-    console.log('Upload successful')
-
     // Save meal entry to database
-    console.log('Saving to database...')
     const { error: dbError, data: dbData } = await supabase
       .from('meals')
       .insert({
@@ -182,8 +243,6 @@ serve(async (req) => {
       console.error('Database error:', dbError)
       throw new Error(`Failed to save meal data: ${dbError.message}`)
     }
-
-    console.log('Database insert successful:', dbData)
 
     return new Response(
       JSON.stringify({

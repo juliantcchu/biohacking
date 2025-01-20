@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { ThemedText } from './ThemedText';
-import { CircularProgress } from './CircularProgress';
+import { ProgressBar } from './ui/ProgressBar';
+import { useRouter } from 'expo-router';
 
 interface NutrientCardProps {
   name: string;
@@ -12,60 +12,59 @@ interface NutrientCardProps {
 }
 
 export function NutrientCard({ name, purpose, current, target, unit }: NutrientCardProps) {
-  const progress = Math.min((current / target) * 100, 100);
-  
+  const router = useRouter();
+  const progress = Math.min(current / target, 1);
+
+  const handlePress = () => {
+    router.push({
+      pathname: '/nutrient-details',
+      params: { nutrientName: name }
+    });
+  };
+
   return (
-    <View style={styles.card}>
-      <View style={styles.chartContainer}>
-        <CircularProgress 
-          percentage={progress}
-          radius={30}
-          strokeWidth={8}
-          color="#0368F0"
-        />
-      </View>
-      <View style={styles.textContent}>
-        <ThemedText type="subtitle" style={styles.name}>{name}</ThemedText>
-        <ThemedText style={styles.purpose}>{purpose}</ThemedText>
-        <ThemedText style={styles.intake}>
+    <TouchableOpacity style={styles.container} onPress={handlePress}>
+      <View style={styles.header}>
+        <ThemedText style={styles.title}>{name}</ThemedText>
+        <ThemedText style={styles.amount}>
           {current}/{target} {unit}
         </ThemedText>
       </View>
-    </View>
+      <ProgressBar progress={progress} />
+      <ThemedText style={styles.purpose}>{purpose}</ThemedText>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    padding: 16,
+  container: {
     backgroundColor: 'white',
     borderRadius: 12,
-    marginBottom: 12,
+    padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  chartContainer: {
-    marginRight: 16,
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
   },
-  textContent: {
-    flex: 1,
-  },
-  name: {
-    fontSize: 18,
-    marginBottom: 4,
+  amount: {
+    fontSize: 14,
+    color: '#666',
   },
   purpose: {
     fontSize: 14,
-    opacity: 0.7,
-    marginBottom: 8,
-  },
-  intake: {
-    fontSize: 14,
-    fontWeight: '500',
+    color: '#666',
+    marginTop: 8,
   },
 }); 

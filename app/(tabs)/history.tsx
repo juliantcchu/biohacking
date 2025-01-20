@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Modal, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Modal, ActivityIndicator, Alert } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO } from 'date-fns';
+import { NUTRIENTS } from '@/lib/nutrients';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const IMAGE_SIZE = 80;
@@ -16,11 +17,7 @@ interface Meal {
   image_id: string;
   user_id: string;
   nutrient_content: {
-    'Omega-3': number;
-    'Phosphatidylserine': number;
-    'Choline': number;
-    'Creatine': number;
-    'Vitamin D3': number;
+    [K in keyof typeof NUTRIENTS]: number;
   };
   confirmed: boolean;
   notes: string;
@@ -30,19 +27,13 @@ interface GroupedMeals {
   [key: string]: Meal[];
 }
 
-type NutrientKey = 'Omega-3' | 'Phosphatidylserine' | 'Choline' | 'Creatine' | 'Vitamin D3';
+type NutrientKey = keyof typeof NUTRIENTS;
 
 interface DailyNutrients {
   [key: string]: Record<NutrientKey, number>;
 }
 
-const TARGET_NUTRIENTS: Record<NutrientKey, { target: number; unit: string }> = {
-  'Omega-3': { target: 2, unit: 'g' },
-  'Phosphatidylserine': { target: 300, unit: 'mg' },
-  'Choline': { target: 500, unit: 'mg' },
-  'Creatine': { target: 5, unit: 'g' },
-  'Vitamin D3': { target: 4000, unit: 'IU' }
-};
+const TARGET_NUTRIENTS = NUTRIENTS;
 
 export default function HistoryScreen() {
   const [activeTab, setActiveTab] = useState('meals');
@@ -51,6 +42,7 @@ export default function HistoryScreen() {
   const [meals, setMeals] = useState<GroupedMeals>({});
   const [dailyNutrients, setDailyNutrients] = useState<DailyNutrients>({});
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     fetchMeals();
@@ -92,16 +84,13 @@ export default function HistoryScreen() {
                           format(parseISO(date), 'MMM d');
 
         if (!acc[displayDate]) {
-          acc[displayDate] = {
-            'Omega-3': 0,
-            'Phosphatidylserine': 0,
-            'Choline': 0,
-            'Creatine': 0,
-            'Vitamin D3': 0
-          };
+          acc[displayDate] = Object.keys(NUTRIENTS).reduce((obj, key) => {
+            obj[key as NutrientKey] = 0;
+            return obj;
+          }, {} as Record<NutrientKey, number>);
         }
 
-        Object.entries(meal.nutrient_content as Record<NutrientKey, number>).forEach(([nutrient, value]) => {
+        Object.entries(meal.nutrient_content).forEach(([nutrient, value]) => {
           acc[displayDate][nutrient as NutrientKey] += value;
         });
 
@@ -134,7 +123,7 @@ export default function HistoryScreen() {
   };
 
   const formatAmount = (nutrient: NutrientKey, value: number) => {
-    const { target, unit } = TARGET_NUTRIENTS[nutrient];
+    const { target, unit } = NUTRIENTS[nutrient];
     return {
       achieved: `${value}`,
       target: `${target}`,
@@ -155,6 +144,39 @@ export default function HistoryScreen() {
     });
   };
 
+  const handleDeleteMeal = async (meal: Meal) => {
+    Alert.alert(
+      "Delete Meal",
+      "Are you sure you want to delete this meal?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('meals')
+                .delete()
+                .eq('id', meal.id);
+              
+              if (error) throw error;
+              
+              // Refresh meals after deletion
+              fetchMeals();
+            } catch (error) {
+              console.error('Error deleting meal:', error);
+              Alert.alert("Error", "Failed to delete meal");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderMealList = () => (
     <ScrollView style={styles.scrollContainer}>
       {loading ? (
@@ -172,24 +194,33 @@ export default function HistoryScreen() {
           <View key={date}>
             <ThemedText style={styles.dateHeader}>{date}</ThemedText>
             {dayMeals.map((meal) => (
-              <TouchableOpacity 
-                key={meal.id} 
-                style={styles.mealCard}
-                onPress={() => handleMealPress(meal)}
-              >
-                <Image 
-                  source={{ uri: getImageUrl(meal) }} 
-                  style={styles.mealImage}
-                />
-                <View style={styles.mealInfo}>
-                  <ThemedText style={styles.mealName}>
-                    {meal.notes || 'Meal'}
-                  </ThemedText>
-                  <ThemedText style={styles.time}>
-                    {format(parseISO(meal.created_at), 'h:mm a')}
-                  </ThemedText>
-                </View>
-              </TouchableOpacity>
+              <View key={meal.id} style={styles.mealCard}>
+                <TouchableOpacity 
+                  style={styles.mealContent}
+                  onPress={() => handleMealPress(meal)}
+                >
+                  <Image 
+                    source={{ uri: getImageUrl(meal) }} 
+                    style={styles.mealImage}
+                  />
+                  <View style={styles.mealInfo}>
+                    <ThemedText style={styles.mealName}>
+                      {meal.notes || 'Meal'}
+                    </ThemedText>
+                    <ThemedText style={styles.time}>
+                      {format(parseISO(meal.created_at), 'h:mm a')}
+                    </ThemedText>
+                  </View>
+                </TouchableOpacity>
+                {isEditing && (
+                  <TouchableOpacity 
+                    onPress={() => handleDeleteMeal(meal)}
+                    style={styles.deleteButton}
+                  >
+                    <IconSymbol name="trash.fill" size={20} color="#FF3B30" />
+                  </TouchableOpacity>
+                )}
+              </View>
             ))}
           </View>
         ))
@@ -216,7 +247,7 @@ export default function HistoryScreen() {
             <View style={styles.nutrientCard}>
               {Object.entries(nutrients).map(([nutrient, value]) => {
                 const nutrientKey = nutrient as NutrientKey;
-                const { target } = TARGET_NUTRIENTS[nutrientKey];
+                const { target } = NUTRIENTS[nutrientKey];
                 const formatted = formatAmount(nutrientKey, value);
                 return (
                   <View key={nutrient} style={styles.nutrientRow}>
@@ -251,7 +282,19 @@ export default function HistoryScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="title">History</ThemedText>
+        <View style={styles.headerContent}>
+          <ThemedText type="title">History</ThemedText>
+          <TouchableOpacity 
+            onPress={() => setIsEditing(!isEditing)}
+            style={styles.editButton}
+          >
+            <IconSymbol 
+              name={isEditing ? "checkmark" : "pencil"} 
+              size={20} 
+              color={isEditing ? "#0368F0" : "black"}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
       
       <View style={styles.tabContainer}>
@@ -288,6 +331,14 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  editButton: {
+    padding: 8,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -332,6 +383,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     padding: 12,
+    alignItems: 'center',
+  },
+  mealContent: {
+    flex: 1,
+    flexDirection: 'row',
   },
   mealImage: {
     width: IMAGE_SIZE,
@@ -352,6 +408,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
+  },
+  deleteButton: {
+    padding: 8,
+    marginLeft: 8,
   },
   loadingContainer: {
     flex: 1,

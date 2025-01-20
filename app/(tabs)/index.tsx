@@ -7,43 +7,23 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { startOfDay, endOfDay } from 'date-fns';
+import { NUTRIENTS } from '@/lib/nutrients';
 
 interface Meal {
   nutrient_content: {
-    'Omega-3': number;
-    'Phosphatidylserine': number;
-    'Choline': number;
-    'Creatine': number;
-    'Vitamin D3': number;
+    [K in keyof typeof NUTRIENTS]: number;
   };
 }
-
-const TARGET_NUTRIENTS = {
-  'Omega-3': { target: 2, unit: 'g' },
-  'Phosphatidylserine': { target: 300, unit: 'mg' },
-  'Choline': { target: 500, unit: 'mg' },
-  'Creatine': { target: 5, unit: 'g' },
-  'Vitamin D3': { target: 4000, unit: 'IU' }
-};
-
-const NUTRIENT_PURPOSES: Record<keyof typeof TARGET_NUTRIENTS, string> = {
-  'Omega-3': 'Brain function & mood regulation',
-  'Phosphatidylserine': 'Cognitive function & memory',
-  'Choline': 'Focus & memory support',
-  'Creatine': 'Brain function & muscle strength',
-  'Vitamin D3': 'Hormonal & bone health'
-};
 
 export default function HomeScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [dailyTotals, setDailyTotals] = useState<Record<string, number>>({
-    'Omega-3': 0,
-    'Phosphatidylserine': 0,
-    'Choline': 0,
-    'Creatine': 0,
-    'Vitamin D3': 0
-  });
+  const [dailyTotals, setDailyTotals] = useState<Record<string, number>>(
+    Object.keys(NUTRIENTS).reduce((acc, nutrient) => {
+      acc[nutrient] = 0;
+      return acc;
+    }, {} as Record<string, number>)
+  );
 
   useEffect(() => {
     fetchTodaysMeals();
@@ -83,31 +63,30 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <View style={styles.header}>
+        <ThemedText type="title">Dashboard</ThemedText>
+        <TouchableOpacity 
+          onPress={() => router.push('/profile')}
+          style={styles.profileButton}
+        >
+          <IconSymbol size={32} name="person.circle.fill" color="#000" />
+        </TouchableOpacity>
+      </View>
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <ThemedText type="title">Dashboard</ThemedText>
-          <TouchableOpacity 
-            onPress={() => router.push('/profile')}
-            style={styles.profileButton}
-          >
-            <IconSymbol size={32} name="person.circle.fill" color="#000" />
-          </TouchableOpacity>
-        </View>
-
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0368F0" />
             <ThemedText style={styles.loadingText}>Loading nutrients...</ThemedText>
           </View>
         ) : (
-          Object.entries(TARGET_NUTRIENTS).map(([nutrient, { target, unit }]: [keyof typeof TARGET_NUTRIENTS, { target: number, unit: string }]) => (
+          Object.entries(NUTRIENTS).map(([nutrient, { target, unit, purpose }]) => (
             <NutrientCard
               key={nutrient}
               name={nutrient}
-              purpose={NUTRIENT_PURPOSES[nutrient]}
+              purpose={purpose}
               current={dailyTotals[nutrient] || 0}
               target={target}
               unit={unit}
@@ -125,13 +104,15 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingTop: 48,
   },
   header: {
-    marginBottom: 16,
+    padding: 16,
+    paddingTop: 48,
+    marginBottom: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: 'white',
   },
   profileButton: {
     marginTop: -5,
