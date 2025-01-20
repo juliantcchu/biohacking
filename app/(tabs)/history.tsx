@@ -36,12 +36,12 @@ interface DailyNutrients {
   [key: string]: Record<NutrientKey, number>;
 }
 
-const NUTRIENT_UNITS: Record<NutrientKey, string> = {
-  'Omega-3': 'g',
-  'Phosphatidylserine': 'mg',
-  'Choline': 'mg',
-  'Creatine': 'g',
-  'Vitamin D3': 'IU'
+const TARGET_NUTRIENTS: Record<NutrientKey, { target: number; unit: string }> = {
+  'Omega-3': { target: 2, unit: 'g' },
+  'Phosphatidylserine': { target: 300, unit: 'mg' },
+  'Choline': { target: 500, unit: 'mg' },
+  'Creatine': { target: 5, unit: 'g' },
+  'Vitamin D3': { target: 4000, unit: 'IU' }
 };
 
 export default function HistoryScreen() {
@@ -134,7 +134,12 @@ export default function HistoryScreen() {
   };
 
   const formatAmount = (nutrient: NutrientKey, value: number) => {
-    return `${value}${NUTRIENT_UNITS[nutrient]}`;
+    const { target, unit } = TARGET_NUTRIENTS[nutrient];
+    return {
+      achieved: `${value}`,
+      target: `${target}`,
+      unit
+    };
   };
 
   const handleMealPress = (meal: Meal) => {
@@ -209,14 +214,33 @@ export default function HistoryScreen() {
           <View key={date} style={styles.nutrientDateGroup}>
             <ThemedText style={styles.dateHeader}>{date}</ThemedText>
             <View style={styles.nutrientCard}>
-              {Object.entries(nutrients).map(([nutrient, value]) => (
-                <View key={nutrient} style={styles.nutrientRow}>
-                  <ThemedText style={styles.nutrientName}>{nutrient}</ThemedText>
-                  <ThemedText style={styles.nutrientValue}>
-                    {formatAmount(nutrient as NutrientKey, value)}
-                  </ThemedText>
-                </View>
-              ))}
+              {Object.entries(nutrients).map(([nutrient, value]) => {
+                const nutrientKey = nutrient as NutrientKey;
+                const { target } = TARGET_NUTRIENTS[nutrientKey];
+                const formatted = formatAmount(nutrientKey, value);
+                return (
+                  <View key={nutrient} style={styles.nutrientRow}>
+                    <ThemedText style={styles.nutrientName}>{nutrient}</ThemedText>
+                    <View style={styles.nutrientValueContainer}>
+                      <ThemedText 
+                        style={[
+                          styles.nutrientValue,
+                          value >= target ? styles.nutrientValueHigh : styles.nutrientValueLow
+                        ]}
+                      >
+                        {formatted.achieved}
+                      </ThemedText>
+                      <ThemedText style={styles.nutrientSeparator}>/</ThemedText>
+                      <ThemedText style={styles.nutrientTarget}>
+                        {formatted.target}
+                      </ThemedText>
+                      <ThemedText style={styles.nutrientUnit}>
+                        {formatted.unit}
+                      </ThemedText>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           </View>
         ))
@@ -376,9 +400,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  nutrientValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   nutrientValue: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#0368F0',
+  },
+  nutrientValueHigh: {
+    color: '#34C759', // Green
+  },
+  nutrientValueLow: {
+    color: '#FF3B30', // Red
+  },
+  nutrientSeparator: {
+    fontSize: 16,
+    color: '#666',
+  },
+  nutrientTarget: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#0368F0', // Blue
+  },
+  nutrientUnit: {
+    fontSize: 16,
+    color: '#666',
+    marginLeft: 2,
   },
 }); 
